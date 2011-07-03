@@ -1,91 +1,72 @@
-
-
-
 do ->
 
-    timeStamp = (new Date().getTime())
-    siteId = ->
-        location.href.replace(/[^a-zA-Z0-9_\-]/g, "") + "-" + timeStamp
+  timeStamp = (new Date().getTime())
+  siteId = ->
+    location.href.replace(/[^a-zA-Z0-9_\-]/g, "") + "-" + timeStamp
 
+  $.fn.uuid = ->
+    e =  $(this.get(0))
+    uuid = e.data("uuid")
+    if uuid
+      return uuid
+    else
+      $.fn.uuid.counter += 1
+      uuid = siteId() + "-" + $.fn.uuid.counter
+      e.data("uuid", uuid)
+      return uuid
+  $.fn.uuid.counter = 0
 
+  $.fn.editInExternalEditor = (port) ->
+    that = $(this)
 
-    $.fn.uuid = ->
-        e =  $(this.get(0))
-        uuid = e.data("uuid")
-        if uuid
-            return uuid
-        else
-            $.fn.uuid.counter += 1
-            uuid = siteId() + "-" + $.fn.uuid.counter
-            e.data("uuid", uuid)
-            return uuid
-    $.fn.uuid.counter = 0
+    if that.data "server"
+      return
+    that.data "server", true
 
+    sendToEditor = (spawn=false) ->
+      port.postMessage
+        textarea: that.val()
+        uuid: that.uuid()
+        spawn: spawn
+        action: "open"
 
-    $.fn.editInExternalEditor = (port) ->
-        that = $(this)
+    sendToEditor(true)
 
-        if that.data "server"
-            return
-        that.data "server", true
-
-        sendToEditor = (spawn=false) ->
-            port.postMessage
-                textarea: that.val()
-                uuid: that.uuid()
-                spawn: spawn
-                action: "open"
-
-        sendToEditor(true)
-
-
-    $.fn.flashBg = ->
-        @addClass "textareaconnect-updated"
-        setTimeout =>
-            @removeClass "textareaconnect-updated"
-        , 100
-
+  $.fn.flashBg = ->
+    @addClass "textareaconnect-updated"
+    setTimeout =>
+      @removeClass "textareaconnect-updated"
+    , 100
 
 textAreas = {}
 
-
 port = chrome.extension.connect  name: "textareapipe"
 port.onMessage.addListener (obj) ->
-    textarea = textAreas[obj.uuid]
-    # No flashing if content did not get updated.
-    if obj.textarea is textarea.val()
-        return
-    textarea.val obj.textarea
-    textarea.flashBg()
-
+  textarea = textAreas[obj.uuid]
+  # No flashing if content did not get updated.
+  if obj.textarea is textarea.val()
+    return
+  textarea.val obj.textarea
+  textarea.flashBg()
 
 # Listen contextmenu clicks
 chrome.extension.onRequest.addListener (req, sender) ->
 
-    if req.action is "edittextarea"
+  if req.action is "edittextarea"
 
-        realUrl = req.onClickData.frameUrl || req.onClickData.pageUrl
-        if realUrl isnt window.location.href
-            return
+    realUrl = req.onClickData.frameUrl || req.onClickData.pageUrl
+    if realUrl isnt window.location.href
+      return
 
-        textarea = $(document.activeElement)
-        textAreas[textarea.uuid()] = textarea
-        textarea.editInExternalEditor(port)
-
+    textarea = $(document.activeElement)
+    textAreas[textarea.uuid()] = textarea
+    textarea.editInExternalEditor(port)
 
 $(window).unload ->
 
+  uuids =  (ta.uuid() for key, ta of textAreas)
 
-    uuids =  (ta.uuid() for key, ta of textAreas)
-
-
-    if uuids.length > 0
-        port.postMessage
-            action: "delete"
-            uuids: uuids
-
-
-
-
-
-
+  if uuids.length > 0
+    port.postMessage
+      action: "delete"
+      uuids: uuids
