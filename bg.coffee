@@ -1,17 +1,14 @@
-
-
-
-localStorage.host = localStorage.host or "localhost"
-localStorage.port = localStorage.port or 32942
+localStorage.url = 'http://localhost:32942'
 
 window.connection = null
 
 loadSocketIO = ->
     clearTimeout loadSocketIO.timer
-    console.log "trying to get io from #{ localStorage.host }:#{ localStorage.port }"
+    scriptUrl = "#{localStorage.url}/socket.io/socket.io.js"
+    console.log "trying to get io from #{scriptUrl}"
     if not window.io
-        jQuery.getScript "http://#{ localStorage.host }:#{ localStorage.port }/socket.io/socket.io.js", ->
-            window.connection = new Connection(localStorage.host, localStorage.port)
+        jQuery.getScript scriptUrl , ->
+            window.connection = new Connection(localStorage.url)
             initExtension()
             clearTimeout loadSocketIO.timer
 
@@ -21,14 +18,14 @@ loadSocketIO = ->
         console.log "we aleready have io"
 
 
-
 initExtension = ->
 
-    chrome.contextMenus.create
-        title: "Edit in external editor"
-        contexts: ["editable",]
-        onclick: ( onClickData, tab ) ->
-            chrome.tabs.sendRequest tab.id, action: "edittextarea", onClickData: onClickData
+    chrome.contextMenus.removeAll ->
+        chrome.contextMenus.create
+            title: "Edit in external editor"
+            contexts: ["editable",]
+            onclick: ( onClickData, tab ) ->
+                chrome.tabs.sendRequest tab.id, action: "edittextarea", onClickData: onClickData
 
 
     chrome.extension.onConnect.addListener (port) ->
@@ -51,36 +48,36 @@ showTempNotification = (msg) ->
     notification.show()
     setTimeout ->
         notification.cancel()
-    , 5000
+    , 3000
 
 
 
 class Connection
 
-    constructor: (@host, @port) ->
+    isConnected: false
+
+    constructor: (@url) ->
         @ports = {}
         @socket = null
         @pageActions =
             open: (port, msg) =>
                 @ports[msg.uuid] = port
                 msg.type = msg.type or "txt"
-                @send msg
+                @send 'open', msg
 
             delete: (port, msg) =>
                 for uuid in msg.uuids
                     delete @ports[uuid]
-                @send msg
+                @send 'delete', msg
 
         @initSocket()
-        console.log "creating new socket #{@host}:#{@port}"
 
     initSocket: ->
-
+        console.log "creating new socket #{@url}"
 
         @socket?.disconnect()
 
-
-        @socket = new io.Socket @host, port: @port
+        @socket = io.connect(@url)
 
         @socket.on "message", (msg) =>
             obj = JSON.parse msg
@@ -89,43 +86,24 @@ class Connection
 
 
         @socket.on "connect", =>
-            console.log "stopping connection poller"
-            clearTimeout @reconnectTimer
-            showTempNotification "Connected to TextareaServer at #{ @socket.transport.socket.URL }"
+            @isConnected = true
+            console.log(this)
+            showTempNotification "Connected to TextareaServer at #{@url}"
 
         @socket.on "disconnect", =>
-            showTempNotification "Disconnected from TextareaServer at #{ @socket.transport.socket.URL }"
-            @_reConnect()
+            @isConnected = false
+            console.log "Disconnected..."
+            showTempNotification "Disconnected from TextareaServer at #{@url}"
 
-        @socket.connect()
+        @socket.on "reconnect", =>
+          console.log("Reconnecting...")
 
-    send: (obj) ->
-        if not @isConnected()
-          alert "Sorry, not connected to TextareaServer"
+        @socket
+
+    send: (action, args...) ->
+        if @isConnected
+          @socket.emit action, args...
         else
-          @socket.send JSON.stringify obj
-
-    isConnected: ->
-        @socket?.connected
-
-    _reConnect: ->
-
-        # console.log "Trying to connect to #{ @socket.transport?.socket?.URL }"
-
-        if not @isConnected()
-            @socket.connect()
-
-        clearTimeout @reconnectTimer
-
-        # Retry
-        @reconnectTimer = setTimeout =>
-            @_reConnect()
-        , 2000
-
-
-
-
-
-
+          alert "Sorry, not connected to TextareaServer"
 
 loadSocketIO()
