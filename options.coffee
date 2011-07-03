@@ -1,26 +1,20 @@
-
-
-
 window.onload = ->
 
-    # Load previous settings
-    for key, value of localStorage
-        $("##{key}").val value
+  # Load previous settings
+  for key, value of localStorage
+      $("##{key}").val(value)
 
-    bkg = chrome.extension.getBackgroundPage()
+  bkg = chrome.extension.getBackgroundPage()
 
-    $("#save").click ->
-        $(".setting").each ->
+  $("#save").click ->
+    $(".setting").each ->
+      el = $(this)
+      name  = el.attr("id")
+      value = el.val()
 
-            e = $(this)
-            setting = e.attr("id")
-            value = e.val()
+      localStorage[name] = value
+      bkg.connection?[name] = value
 
-            localStorage[setting] = value
-            bkg.connection?[setting] = value
+    bkg.connection?.initSocket()
 
-        bkg.connection?.initSocket()
-
-        return this
-
-
+    return this
